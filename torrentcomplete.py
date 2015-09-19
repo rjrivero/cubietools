@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4
+# vim: tabstop=4 expandtab shiftwidth=4 softtabstop=4
 
 # Called when a torrent is complete
 # Does not receive a single parameter from transmission -
@@ -12,6 +12,7 @@
 from __future__ import unicode_literals
 from babelfish import Language
 from datetime import timedelta
+import os.path
 import subliminal
 
 # Folder to scan for torrents
@@ -20,36 +21,20 @@ TORRENT_FOLDER = "/tank/torrent"
 REGION_CACHE = "/tmp/dogpile.cache.dbm"
 
 # configure the cache
-subliminal.cache_region.configure('dogpile.cache.dbm', 
-	arguments={ 'filename': REGION_CACHE })
+subliminal.region.configure('dogpile.cache.dbm', 
+    arguments={ 'filename': REGION_CACHE })
 
 # scan for videos in the folder and their subtitles
 videos = subliminal.scan_videos(
-	[TORRENT_FOLDER],
-	subtitles=True,
-	embedded_subtitles=True,
-	age=timedelta(days=1)
+             TORRENT_FOLDER,
+             subtitles=False,
+             embedded_subtitles=False
 )
 
-# Get the full path of each video
-paths = tuple(video.name for video in videos)
-
-# download
-subliminal.download_best_subtitles(
-	videos,
-	{Language('eng'),}
-)
-
-# Rename the subtitles file to match the video name exactly
-from os.path import join, splitext, basename, dirname
-from os import rename
-from shutil import copyfile
-for path in paths:
-	dname = dirname(path)
-	bname = basename(path)
-	video = splitext(bname)[0]
-	try:
-		copyfile( join(dname, "%s.en.srt" % video),
-			join(dname, "%s.srt" % video))
-	except:
-		pass
+# Download subtitles if not already downloaded
+for video in (v for v in videos if v.age < timedelta(days=1)):
+    srt = os.path.splitext(video.name)[0] + ".srt"
+    if not os.path.exists(srt):
+        subs = subliminal.download_best_subtitles([video], {Language('eng')})
+        for v, s in subs.iteritems():
+            subliminal.save_subtitles(v, s, single=True)
